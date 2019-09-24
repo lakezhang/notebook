@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 
 import tensorflow as tf
+import pandas as pd
 
 COLUMN_NAMES = ['SepalLength', 'SepalWidth', 'PetalLength', 'PetalWidth', 'Species']
 SPECIES = ['Setosa', 'Versicolor', 'Virginica']
@@ -82,6 +83,43 @@ def main(_) :
 
     export_dir = classifier.export_savedmodel(FLAGS.model_dir+'/export', serving_input_receiver_fn)
 
+def server_test(_) :
+    #check exported model using saved_model_cli
+    #saved_model_cli show --dir export/1569225349/ --tag_set serve --signature_def serving_default
+
+    #saved_model_cli run --dir export/1569225349/ --tag_set serve --signature_def serving_default \
+    #                --input_examples 'inputs=[{"SepalLength":[5.1],"SepalWidth":[3.3],"PetalLength":[1.7],"PetalWidth":[0.5]}]'
+
+    export_dir = './model/iris/export/1569225349'
+    # 从导出目录中加载模型，并生成预测函数。
+    predict_fn = tf.contrib.predictor.from_saved_model(export_dir)
+
+    # 使用 Pandas 数据框定义测试数据。
+    inputs = pd.DataFrame({
+        'SepalLength': [5.1, 5.9, 6.9],
+        'SepalWidth': [3.3, 3.0, 3.1],
+        'PetalLength': [1.7, 4.2, 5.4],
+        'PetalWidth': [0.5, 1.5, 2.1],
+    })
+
+    # 将输入数据转换成序列化后的 Example 字符串。
+    examples = []
+    for index, row in inputs.iterrows():
+        feature = {}
+        for col, value in row.iteritems():
+            feature[col] = tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
+        example = tf.train.Example(
+            features=tf.train.Features(
+                feature=feature
+            )
+        )
+        examples.append(example.SerializeToString())
+
+    # 开始预测
+    predictions = predict_fn({'inputs': examples})
+
+    print(predictions)
+
 if __name__ == '__main__':
     flags = tf.app.flags
     flags.DEFINE_string('model_dir', './model/iris', 'Directory where all models are saved')
@@ -94,8 +132,11 @@ if __name__ == '__main__':
     flags.DEFINE_float('learning_rate', 0.01, 'Learning Rate')
 
     FLAGS = flags.FLAGS
-
     tf.logging.set_verbosity(tf.logging.INFO)
+
+    # train and evaluate
     tf.app.run()
+    # test server
+    tf.app.run(main=server_test)
 
 
